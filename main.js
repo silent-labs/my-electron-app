@@ -1,9 +1,11 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const { fork } = require('child_process');
 
 let mainWindow;
 let dashboardWindow;
+let cryptWorker;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -33,7 +35,7 @@ function createAuthWindow(type) {
   authWindow.loadFile(`${type}.html`);
 }
 
-function createDashboardWindow() {
+function createDashboardWindow(masterPassword) {
   dashboardWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -43,11 +45,14 @@ function createDashboardWindow() {
     }
   });
 
-  dashboardWindow.loadFile('dashboard.html');
+  dashboardWindow.loadFile('dashboard.html', { query: { masterPassword: masterPassword } });
   mainWindow.close();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  cryptWorker = fork(path.join(__dirname, 'cryptWorker.js'));
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -69,8 +74,8 @@ ipcMain.on('open-register', () => {
   createAuthWindow('register');
 });
 
-ipcMain.on('login-successful', () => {
-  createDashboardWindow();
+ipcMain.on('login-successful', (event, masterPassword) => {
+  createDashboardWindow(masterPassword);
 });
 
 ipcMain.on('close-auth-window', (event) => {
@@ -87,6 +92,10 @@ ipcMain.handle('read-file', async (event, filePath) => {
     const data = await fs.readFile(filePath, 'utf-8');
     return data;
   } catch (error) {
+    if (error.code === 'ENOENT') {
+      // El archivo no existe, devolvemos null
+      return null;
+    }
     throw error;
   }
 });
@@ -96,6 +105,33 @@ ipcMain.handle('write-file', async (event, filePath, data) => {
     await fs.writeFile(filePath, data);
     return true;
   } catch (error) {
+    console.error('Error writing file:', error);
     throw error;
   }
+});
+
+ipcMain.handle('encrypt-data', (event, data, password) => {
+  return new Promise((resolve, reject) => {
+    cryptWorker.send({ type: 'encrypt', data, password });
+    cryptWorker.once('message', (message) => {
+      if (message.type === 'encryptResult') {
+        resolve(message.data);
+      } else {
+        reject(new Error('Unexpected message type'));
+      }
+    });
+  });
+});
+
+ipcMain.handle('decrypt-data', (event, data, password) => {
+  return new Promise((resolve, reject) => {
+    cryptWorker.send({ type: 'decrypt', data, password });
+    cryptWorker.once('message', (message) => {
+      if (message.type === 'decryptResult') {
+        resolve(message.data);
+      } else {
+        reject(new Error('Unexpected message type'));
+      }
+    });
+  });
 });

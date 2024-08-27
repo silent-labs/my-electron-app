@@ -10,14 +10,19 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         const userDataPath = await ipcRenderer.invoke('get-user-data-path');
         const vaultPath = path.join(userDataPath, 'passwords.json');
         const encryptedData = await ipcRenderer.invoke('read-file', vaultPath);
+        
+        if (encryptedData === null) {
+            alert('No se encontró un vault. Por favor, crea una cuenta primero.');
+            return;
+        }
+
         const decryptedData = decryptData(encryptedData, masterPassword);
         const userData = JSON.parse(decryptedData);
 
         const hash = crypto.pbkdf2Sync(masterPassword, userData.salt, 1000, 64, 'sha512').toString('hex');
 
         if (hash === userData.hash) {
-            localStorage.setItem('masterPassword', masterPassword);
-            ipcRenderer.send('login-successful');
+            ipcRenderer.send('login-successful', masterPassword);
             ipcRenderer.send('close-auth-window');
         } else {
             alert('Contraseña incorrecta');
