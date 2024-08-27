@@ -18,6 +18,16 @@ async function loadVaultData() {
         const encryptedData = await ipcRenderer.invoke('read-file', vaultPath);
         const decryptedData = await ipcRenderer.invoke('decrypt-data', encryptedData, masterPassword);
         vaultData = JSON.parse(decryptedData);
+        
+        // Asignar IDs a los elementos que no los tengan
+        vaultData.passwords = vaultData.passwords.map(item => {
+            if (!item.id) {
+                item.id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+            }
+            return item;
+        });
+        
+        await saveVaultData(); // Guardar los cambios con los nuevos IDs
         displayPasswords();
     } catch (error) {
         console.error('Error al cargar el vault:', error);
@@ -53,6 +63,7 @@ document.getElementById('addPasswordForm').addEventListener('submit', async (e) 
     const encryptedTwoFactorSecret = await ipcRenderer.invoke('encrypt-data', twoFactorSecret, masterPassword);
     
     vaultData.passwords.push({ 
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9), 
         siteName, 
         website,
         username, 
@@ -92,9 +103,17 @@ document.getElementById('searchBtn').addEventListener('click', () => {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const results = vaultData.passwords.filter(item => 
         item.siteName.toLowerCase().includes(searchTerm) || 
-        item.username.toLowerCase().includes(searchTerm)
+        item.username.toLowerCase().includes(searchTerm) ||
+        (item.email && item.email.toLowerCase().includes(searchTerm))
     );
     displayPasswords(results);
+});
+
+// Activar búsqueda al presionar Enter
+document.getElementById('searchInput').addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') {
+        document.getElementById('searchBtn').click();
+    }
 });
 
 // Mostrar contraseñas
@@ -134,13 +153,13 @@ async function displayPasswords(passwords = vaultData.passwords) {
                                 <span class="icon"><i class="fas fa-info-circle"></i></span>
                                 <span>Detalles</span>
                             </a>
-                            <a class="level-item button is-small is-warning edit-btn" data-index="${passwords.indexOf(item)}">
+                            <a class="level-item button is-small is-warning edit-btn" data-id="${item.id}">
                                 <span class="icon"><i class="fas fa-edit"></i></span>
                                 <span>Editar</span>
                             </a>
                         </div>
                         <div class="level-right">
-                            <a class="level-item button is-small is-danger delete-btn" data-index="${passwords.indexOf(item)}">
+                            <a class="level-item button is-small is-danger delete-btn" data-id="${item.id}">
                                 <span class="icon"><i class="fas fa-trash-alt"></i></span>
                                 <span>Borrar</span>
                             </a>
@@ -175,64 +194,33 @@ document.getElementById('searchResults').addEventListener('click', (e) => {
                     <div class="content">
                         <div class="field">
                             <label class="label">Contraseña:</label>
-                            <div class="control">
-                                <div class="field has-addons">
-                                    <div class="control is-expanded">
-                                        <input class="input" type="password" value="${password}" readonly id="passwordInput">
-                                    </div>
-                                    <div class="control">
-                                        <button class="button is-info toggle-password-btn">
-                                            <span class="icon">
-                                                <i class="fas fa-eye"></i>
-                                            </span>
-                                        </button>
-                                    </div>
-                                    <div class="control">
-                                        <button class="button is-info copy-btn" data-clipboard-text="${password}">
-                                            <span class="icon">
-                                                <i class="fas fa-copy"></i>
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
+                            <div class="control has-icons-right">
+                                <input class="input" type="password" value="${password}" readonly id="passwordInput">
+                                <span class="icon is-small is-right copy-btn" data-clipboard-text="${password}">
+                                    <i class="fas fa-copy"></i>
+                                </span>
                             </div>
                         </div>
                         <div class="field">
                             <label class="label">Email:</label>
-                            <div class="control">
-                                <div class="field has-addons">
-                                    <div class="control is-expanded">
-                                        <input class="input" type="text" value="${email || 'No disponible'}" readonly>
-                                    </div>
-                                    ${email ? `
-                                        <div class="control">
-                                            <button class="button is-info copy-btn" data-clipboard-text="${email}">
-                                                <span class="icon">
-                                                    <i class="fas fa-copy"></i>
-                                                </span>
-                                            </button>
-                                        </div>
-                                    ` : ''}
-                                </div>
+                            <div class="control has-icons-right">
+                                <input class="input" type="text" value="${email || 'No disponible'}" readonly>
+                                ${email ? `
+                                    <span class="icon is-small is-right copy-btn" data-clipboard-text="${email}">
+                                        <i class="fas fa-copy"></i>
+                                    </span>
+                                ` : ''}
                             </div>
                         </div>
                         <div class="field">
                             <label class="label">Verificación de dos pasos:</label>
-                            <div class="control">
-                                <div class="field has-addons">
-                                    <div class="control is-expanded">
-                                        <input class="input" type="text" value="${twoFactor || 'No disponible'}" readonly>
-                                    </div>
-                                    ${twoFactor ? `
-                                        <div class="control">
-                                            <button class="button is-info copy-btn" data-clipboard-text="${twoFactor}">
-                                                <span class="icon">
-                                                    <i class="fas fa-copy"></i>
-                                                </span>
-                                            </button>
-                                        </div>
-                                    ` : ''}
-                                </div>
+                            <div class="control has-icons-right">
+                                <input class="input" type="text" value="${twoFactor || 'No disponible'}" readonly>
+                                ${twoFactor ? `
+                                    <span class="icon is-small is-right copy-btn" data-clipboard-text="${twoFactor}">
+                                        <i class="fas fa-copy"></i>
+                                    </span>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -284,8 +272,9 @@ document.getElementById('searchResults').addEventListener('click', (e) => {
 
 // Borrar contraseña
 document.getElementById('searchResults').addEventListener('click', async (e) => {
-    if (e.target.classList.contains('delete-btn')) {
-        const index = e.target.getAttribute('data-index');
+    if (e.target.closest('.delete-btn')) {
+        const button = e.target.closest('.delete-btn');
+        const id = button.getAttribute('data-id');
         
         const confirmModal = document.createElement('div');
         confirmModal.className = 'modal is-active';
@@ -318,7 +307,13 @@ document.getElementById('searchResults').addEventListener('click', async (e) => 
         confirmModal.querySelector('.confirm-delete').addEventListener('click', async () => {
             confirmModal.remove();
             
-            vaultData.passwords.splice(index, 1);
+            const index = vaultData.passwords.findIndex(password => password.id === id);
+            if (index !== -1) {
+                vaultData.passwords.splice(index, 1);
+            } else {
+                console.error('No se encontró el elemento a eliminar');
+                return;
+            }
             
             const loadingMessage = document.createElement('div');
             loadingMessage.textContent = 'Borrando...';
@@ -351,8 +346,14 @@ document.getElementById('searchResults').addEventListener('click', async (e) => 
 document.getElementById('searchResults').addEventListener('click', async (e) => {
     if (e.target.closest('.edit-btn')) {
         const button = e.target.closest('.edit-btn');
-        const index = button.getAttribute('data-index');
-        const item = vaultData.passwords[index];
+        const id = button.getAttribute('data-id');
+        const item = vaultData.passwords.find(password => password.id === id);
+
+        if (!item) {
+            console.error('No se encontró el elemento a editar');
+            showNotification('Error: No se encontró el elemento a editar', 'is-danger');
+            return;
+        }
 
         const modal = document.createElement('div');
         modal.className = 'modal is-active';
@@ -416,6 +417,7 @@ document.getElementById('searchResults').addEventListener('click', async (e) => 
 
         modal.querySelector('#saveEditBtn').addEventListener('click', async () => {
             const editedItem = {
+                id: item.id, // Asegúrate de mantener el id original
                 siteName: document.getElementById('editSiteName').value,
                 website: document.getElementById('editWebsite').value,
                 username: document.getElementById('editUsername').value,
@@ -434,7 +436,13 @@ document.getElementById('searchResults').addEventListener('click', async (e) => 
                 editedItem.twoFactorSecret = await ipcRenderer.invoke('encrypt-data', editedItem.twoFactorSecret, masterPassword);
             }
 
-            vaultData.passwords[index] = { ...item, ...editedItem };
+            const index = vaultData.passwords.findIndex(password => password.id === id);
+            if (index !== -1) {
+                vaultData.passwords[index] = { ...item, ...editedItem };
+            } else {
+                console.error('No se encontró el elemento a actualizar');
+                return;
+            }
 
             try {
                 await saveVaultData();
