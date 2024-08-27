@@ -1,15 +1,18 @@
 {
-  "name": "password-manager",
+  "name": "mi-app-electron",
   "version": "1.0.0",
+  "description": "Gestor de contraseñas con Electron",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron ."
   },
+  "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "devDependencies": {
-    "electron": "^32.0.1"
+    "electron": "^13.0.0"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1"
   }
 }
