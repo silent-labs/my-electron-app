@@ -21,14 +21,19 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         passwords: []
     };
 
-    const encryptedData = encryptData(JSON.stringify(userData), masterPassword);
+    const encryptedData = await ipcRenderer.invoke('encrypt-data', JSON.stringify(userData), masterPassword);
 
     try {
         const userDataPath = await ipcRenderer.invoke('get-user-data-path');
         const vaultPath = path.join(userDataPath, 'passwords.json');
         await ipcRenderer.invoke('write-file', vaultPath, encryptedData);
         alert('Cuenta creada con éxito');
-        ipcRenderer.send('close-auth-window');
+        
+        // Guardar la contraseña maestra en el almacenamiento local
+        localStorage.setItem('masterPassword', masterPassword);
+        
+        // Redirigir al usuario a dashboard.html
+        window.location.href = 'dashboard.html';
     } catch (error) {
         console.error('Error al crear la cuenta:', error);
         alert('Error al crear la cuenta');

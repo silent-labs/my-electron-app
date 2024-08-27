@@ -22,8 +22,11 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         const hash = crypto.pbkdf2Sync(masterPassword, userData.salt, 1000, 64, 'sha512').toString('hex');
 
         if (hash === userData.hash) {
-            ipcRenderer.send('login-successful', masterPassword);
-            ipcRenderer.send('close-auth-window');
+            // Guardar la contraseña maestra en el almacenamiento local
+            localStorage.setItem('masterPassword', masterPassword);
+            
+            // Redirigir al usuario a dashboard.html
+            window.location.href = 'dashboard.html';
         } else {
             alert('Contraseña incorrecta');
         }
@@ -44,4 +47,51 @@ function decryptData(encryptedData, password) {
     decrypted += decipher.final('utf8');
 
     return decrypted;
+}
+
+async function displaySavedItems(passwords, masterPassword) {
+    const loginForm = document.getElementById('loginForm');
+    const savedItemsContainer = document.getElementById('savedItemsContainer');
+    const savedItemsList = document.getElementById('savedItemsList');
+
+    // Ocultar el formulario de inicio de sesión
+    loginForm.style.display = 'none';
+
+    // Limpiar la lista de elementos guardados
+    savedItemsList.innerHTML = '';
+
+    // Agregar cada elemento guardado a la lista
+    for (const item of passwords) {
+        const decryptedPassword = await decryptPassword(item.password, masterPassword);
+        const listItem = document.createElement('li');
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        listItem.innerHTML = `
+            <div>
+                <h5 class="mb-1">${item.siteName}</h5>
+                <p class="mb-1">Usuario: ${item.username}</p>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="copyPassword('${decryptedPassword}')">Copiar Contraseña</button>
+        `;
+        savedItemsList.appendChild(listItem);
+    }
+
+    // Mostrar el contenedor de elementos guardados
+    savedItemsContainer.style.display = 'block';
+}
+
+async function decryptPassword(encryptedPassword, masterPassword) {
+    try {
+        return await ipcRenderer.invoke('decrypt-data', encryptedPassword, masterPassword);
+    } catch (error) {
+        console.error('Error al desencriptar la contraseña:', error);
+        return 'Error al desencriptar';
+    }
+}
+
+function copyPassword(password) {
+    navigator.clipboard.writeText(password).then(() => {
+        alert('Contraseña copiada al portapapeles');
+    }).catch(err => {
+        console.error('Error al copiar la contraseña: ', err);
+    });
 }
